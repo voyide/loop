@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>Loopsmith — Centered + Extra Shapes</title>
+<style>
+  :root{
+    --font: "Times New Roman", Georgia, serif;
+
+    --bg: #e3def5;          /* soft purple */
+    --panel:#ffffff;        /* white */
+    --frame:#0e0e10;        /* near-black */
+    --grid:#d4d7e4;         /* gentle grey */
+    --ink:#0e0e10;          /* text */
+    --acc:#a093ff;          /* purple accent */
+    --acc-soft:#cfc8ff;     /* soft purple accent */
+
+    --shadow-strong: 0 18px 40px rgba(0,0,0,.26);
+    --shadow-mid:    0 12px 22px rgba(0,0,0,.18);
+    --shadow-light:  0 6px 12px rgba(0,0,0,.14);
+  }
+
+  /* Global serif bold italic everywhere */
+  html,body,*{
+    font-family: var(--font);
+    font-style: italic !important;
+    font-weight: 800 !important;
+    letter-spacing: .2px;
+  }
+
+  html,body{
+    height:100%;
+    margin:0;
+    background: radial-gradient(1200px 750px at 50% -200px, #f4f2ff 0%, var(--bg) 60%, #dad6f1 100%);
+    color:var(--ink);
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+
+  /* Perfect centering with safe-area guards */
+  .wrap{
+    height:100dvh; width:100vw;
+    display:grid; place-items:center;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+
+  .panel{
+    margin-inline:auto;                /* ensure true center */
+    width:min(94vw, 760px);
+    height:min(180vw, 94vh);
+    background:var(--panel);
+    border:2px solid var(--frame);
+    border-radius: clamp(14px, 2.2vw, 24px);
+    box-shadow: var(--shadow-strong);
+    display:flex; flex-direction:column;
+    overflow:hidden;
+    position:relative;
+    transform: translateZ(0);          /* avoid subpixel jitter */
+  }
+
+  /* Header */
+  .hud{
+    background: linear-gradient(180deg, #ffffff 0%, #f7f7ff 100%);
+    border-bottom: 2px solid var(--grid);
+    padding: 14px 14px 12px;
+  }
+  .hudTop{
+    display:grid; grid-template-columns: 1fr auto 1fr;
+    align-items:center; gap:10px;
+  }
+  #bestLabel{
+    color:var(--ink);
+    opacity:.9;
+    padding: 6px 10px;
+    border:2px solid var(--frame);
+    border-radius: 10px;
+    box-shadow: var(--shadow-light);
+    background:#fff;
+    justify-self:start;
+  }
+
+  .pauseBtn{
+    justify-self:end;
+    width:54px; height:54px; border-radius:14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f3f3fb 100%);
+    border:2px solid var(--frame);
+    box-shadow: var(--shadow-mid);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+    transition: transform .06s ease;
+  }
+  .pauseBtn:active{ transform: translateY(1px); }
+  .pauseIcon{ position:relative; width:26px; height:20px; }
+  .pauseIcon:before,.pauseIcon:after{
+    content:''; position:absolute; top:0; bottom:0; width:7px; background:var(--frame); border-radius:2px;
+  }
+  .pauseIcon:before{ left:3px; }
+  .pauseIcon:after{ right:3px; }
+
+  .timerBubble{
+    margin: 8px auto 10px;            /* in flow — no overlap */
+    width:92px; height:48px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%);
+    border:2px solid var(--frame);
+    box-shadow: var(--shadow-mid), inset 0 0 0 2px var(--acc-soft);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px;
+  }
+
+  .scoreLine{ display:flex; align-items:center; justify-content:center; }
+  .scoreBadge{
+    display:inline-flex; align-items:center; justify-content:center;
+    gap:10px; padding:8px 16px;
+    border:2px solid var(--frame);
+    border-radius:12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f5f5ff 100%);
+    box-shadow: var(--shadow-light), inset 0 0 0 2px #f1efff;
+  }
+
+  /* Board */
+  .boardWrap{
+    position:relative; flex:1; margin:14px;
+    background:linear-gradient(180deg, #ffffff 0%, #fbfbff 100%);
+    border:2px solid var(--frame);
+    border-radius:18px;
+    box-shadow: inset 0 1px 0 #ffffff, 0 10px 20px rgba(0,0,0,.12);
+    overflow:hidden;
+  }
+  canvas#board{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+
+  /* Overlays */
+  .overlay{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center; z-index:10;
+    background: rgba(15,15,20,.35);
+    backdrop-filter: blur(8px) saturate(120%);
+  }
+  .overlay.show{ display:flex; }
+  .card{
+    background: linear-gradient(180deg, #ffffff 0%, #f6f6ff 100%);
+    border:2px solid var(--frame);
+    border-radius:14px;
+    padding:16px;
+    width:min(88vw, 420px);
+    text-align:center;
+    box-shadow: var(--shadow-mid);
+  }
+  .card h3{ margin:0 0 8px 0; font-size:20px; }
+  .small{ opacity:.9; font-size:14px; }
+  .btnRow{ margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .btn{
+    padding:8px 14px;
+    border-radius:10px; border:2px solid var(--frame);
+    background: linear-gradient(180deg, #ffffff 0%, #f2f2fb 100%);
+    cursor:pointer;
+    box-shadow: var(--shadow-light);
+    transition: transform .06s ease;
+  }
+  .btn:active{ transform: translateY(1px); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="hud">
+      <div class="hudTop">
+        <div id="bestLabel">BEST 0</div>
+        <div></div>
+        <div class="pauseBtn" id="pauseBtn" title="Pause"><div class="pauseIcon"></div></div>
+      </div>
+      <div class="timerBubble" id="timerBubble">05:00</div>
+      <div class="scoreLine">
+        <div class="scoreBadge">SCORE <span id="scoreVal">0</span></div>
+      </div>
+    </div>
+
+    <div class="boardWrap">
+      <canvas id="board"></canvas>
+    </div>
+  </div>
+
+  <div class="overlay" id="pauseOverlay">
+    <div class="card">
+      <h3>Paused</h3>
+      <div class="small">Timer is stopped.</div>
+      <div class="btnRow">
+        <button class="btn" id="resumeBtn">Resume</button>
+        <button class="btn" id="restartBtn">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="endOverlay">
+    <div class="card">
+      <h3 id="endTitle">Time!</h3>
+      <div class="small" id="endBody"></div>
+      <div class="btnRow">
+        <button class="btn" id="againBtn">Play Again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Canvas
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+
+  // HUD
+  const timerBubble = document.getElementById('timerBubble');
+  const scoreVal = document.getElementById('scoreVal');
+  const bestLabel = document.getElementById('bestLabel');
+
+  // Overlays/controls
+  const pauseBtn = document.getElementById('pauseBtn');
+  const pauseOverlay = document.getElementById('pauseOverlay');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const endOverlay = document.getElementById('endOverlay');
+  const endTitle = document.getElementById('endTitle');
+  const endBody = document.getElementById('endBody');
+  const againBtn = document.getElementById('againBtn');
+
+  // Palette
+  const CSS = (v)=> getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = {
+    frame: CSS('--frame'),
+    grid: CSS('--grid'),
+    ink:  CSS('--ink'),
+    glow: CSS('--acc'),
+    star: CSS('--acc-soft'),
+  };
+  const FONT_FAMILY = getComputedStyle(document.documentElement).getPropertyValue('--font').trim() || 'Times New Roman, Georgia, serif';
+
+  // Game state
+  let ROWS = 8, COLS = 8;
+  let timeLeft = 300;    // 5 minutes
+  let running = true;
+  let paused = false;
+  let best = parseInt(localStorage.getItem('ls_best')||'0',10);
+  let score = 0;
+
+  // Layout
+  let W=300, H=400, dpr=1, cell=44, ox=0, oy=0;
+
+  // Board
+  // New kinds: five specific shapes (2 corners + 3 tees)
+  let grid = [];
+  let stars = [];
+  const starCount = 3;
+
+  // Loops/visuals
+  let scoredEver = new Set(); // award once per round per loop signature
+  let tileGlow = [];
+  let floaters = [];
+  let lastTime = performance.now();
+
+  // Long-press
+  let pressTimer = null;
+  let longDidRotate = false;
+
+  // Helpers
+  const clamp = (v,min,max)=> v<min?min : (v>max?max : v);
+  const rndInt = (a,b)=> a + Math.floor(Math.random()*(b-a+1));
+  const rotSide = (s,rot)=> (s+rot) & 3;
+  const opp = (s)=> (s+2)&3;
+  function fmt(t){
+    const m = Math.floor(t/60), s = Math.floor(t%60);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function resize(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    W = rect.width; H = rect.height;
+    const pad = 12;
+    cell = Math.floor(Math.min((W - pad*2)/COLS, (H - pad*2)/ROWS));
+    ox = Math.round((W - cell*COLS)/2);
+    oy = Math.round((H - cell*ROWS)/2);
+  }
+
+  function initGrid(){
+    grid = [];
+    for(let r=0;r<ROWS;r++){
+      const row=[];
+      for(let c=0;c<COLS;c++){
+        const p = Math.random();
+        let kind;
+        // Five new kinds only
+        if(p < 0.20) kind = 's1';       // corner
+        else if(p < 0.40) kind = 's2';  // tee
+        else if(p < 0.60) kind = 's3';  // tee
+        else if(p < 0.80) kind = 's4';  // corner
+        else kind = 's5';               // tee
+
+        const rot = rndInt(0,3);
+        row.push({kind, rot, bump:0, rippleT:0});
+      }
+      grid.push(row);
+    }
+    stars = [];
+    const used = new Set();
+    while(stars.length < starCount){
+      const r = rndInt(0, ROWS-1), c = rndInt(0, COLS-1);
+      const k = r+','+c;
+      if(used.has(k)) continue;
+      used.add(k);
+      stars.push({r,c, pulse:0});
+    }
+    tileGlow = Array.from({length:ROWS}, ()=> Array(COLS).fill(0));
+    scoredEver.clear();
+    score = 0;
+    updateHUD();
+  }
+
+  function updateHUD(){
+    timerBubble.textContent = fmt(timeLeft);
+    scoreVal.textContent = String(score);
+    bestLabel.textContent = `BEST ${best}`;
+  }
+
+  // New: general connection groups per tile (each group is 2 or 3 connected sides)
+  function tileGroups(t){
+    const rot = t.rot & 3;
+    const rs = (s)=> rotSide(s, rot);
+    switch(t.kind){
+      case 's1': // corner (top <-> left) base, rotates
+        return [ [rs(0), rs(3)] ];
+      case 's2': // tee: top + left + right (missing bottom), rotates
+        return [ [rs(0), rs(1), rs(3)] ];
+      case 's3': // tee: top + right + bottom (missing left), rotates
+        return [ [rs(0), rs(1), rs(2)] ];
+      case 's4': // corner (right <-> bottom) base, rotates
+        return [ [rs(1), rs(2)] ];
+      case 's5': // tee: top + bottom + left (missing right), rotates
+        return [ [rs(0), rs(2), rs(3)] ];
+    }
+    return []; // fallback none
+  }
+  function groupsAt(r,c){ return tileGroups(grid[r][c]); }
+  function groupContaining(groups, s){
+    for(const g of groups){ if(g.includes(s)) return g; }
+    return null;
+  }
+  function tileHasSide(r,c,s){
+    const gs = groupsAt(r,c);
+    return gs.some(g=> g.includes(s));
+  }
+  function outsOnTile(r,c,sIn){
+    const gs = groupsAt(r,c);
+    const g = groupContaining(gs, sIn);
+    if(!g) return [];
+    return g.filter(s=> s!==sIn);
+  }
+
+  // Drawing helpers (unchanged art style)
+  function drawCellBG(x,y){
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, cell, cell);
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x+0.5, y+0.5, cell-1, cell-1);
+  }
+  function sideMid(x,y, s){
+    const m = cell/2;
+    switch(s){
+      case 0: return {x:x+m, y:y};
+      case 1: return {x:x+cell, y:y+m};
+      case 2: return {x:x+m, y:y+cell};
+      case 3: return {x:x, y:y+m};
+    }
+  }
+  function cornerOfSides(x,y,a,b){
+    const set = new Set([a,b]);
+    if(set.has(0) && set.has(1)) return {x:x+cell, y:y};
+    if(set.has(1) && set.has(2)) return {x:x+cell, y:y+cell};
+    if(set.has(2) && set.has(3)) return {x:x, y:y+cell};
+    if(set.has(3) && set.has(0)) return {x:x, y:y};
+    return null;
+  }
+  function isAdjacent(a,b){ return (a+1)%4 === b || (b+1)%4 === a; }
+
+  function drawSegment(x,y, pair, style){
+    const [a,b] = pair;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = style.color || C.ink;
+    ctx.lineWidth = style.width || Math.max(2, Math.floor(cell*0.10));
+    if(isAdjacent(a,b)){
+      const m1 = sideMid(x,y,a), m2 = sideMid(x,y,b);
+      const corner = cornerOfSides(x,y,a,b);
+      const rad = cell/2;
+      ctx.beginPath();
+      ctx.moveTo(m1.x, m1.y);
+      ctx.arcTo(corner.x, corner.y, m2.x, m2.y, rad);
+      ctx.stroke();
+    }else{
+      const m1 = sideMid(x,y,a), m2 = sideMid(x,y,b);
+      ctx.beginPath();
+      ctx.moveTo(m1.x, m1.y);
+      ctx.lineTo(m2.x, m2.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Draw group of 3 as a Y (keep same line style)
+  function drawForkGroup(x,y, sides, style){
+    const cx = x + cell/2, cy = y + cell/2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = style.color || C.ink;
+    ctx.lineWidth = style.width || Math.max(2, Math.floor(cell*0.10));
+    for(const s of sides){
+      const m = sideMid(x,y,s);
+      ctx.beginPath();
+      // Straight arm to center with round caps (matches original styling)
+      ctx.moveTo(m.x, m.y);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawStar(x,y, pulse){
+    const cx = x + cell/2, cy = y + cell/2, r = cell*0.18 + Math.sin(pulse)*2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(pulse*0.2);
+    ctx.fillStyle = C.star;
+    ctx.strokeStyle = C.frame;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const spikes = 5;
+    let rot = Math.PI / 2 * 3;
+    let step = Math.PI / spikes;
+    let outerR = r, innerR = r*0.5;
+    ctx.moveTo(0, -outerR);
+    for (let i = 0; i < spikes; i++) {
+      ctx.lineTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+      rot += step;
+      ctx.lineTo(Math.cos(rot) * innerR, Math.sin(rot) * innerR);
+      rot += step;
+    }
+    ctx.lineTo(0, -outerR);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRipple(x,y, t){
+    if(t<=0) return;
+    const cx = x+cell/2, cy = y+cell/2;
+    const maxR = cell*0.55;
+    const prog = 1 - Math.max(0, Math.min(1, t/300));
+    const r = 8 + prog*maxR;
+    const a = 1 - prog;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(160,146,255,${a*0.6})`; // purple ring
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const x = ox + c*cell, y = oy + r*cell;
+        drawCellBG(x,y);
+
+        const st = stars.find(s=> s.r===r && s.c===c);
+        if(st){ drawStar(x,y, st.pulse||0); }
+
+        const t = grid[r][c];
+        const groups = tileGroups(t);
+        const baseW = Math.max(2, Math.floor(cell*0.10));
+
+        for(const g of groups){
+          if(g.length === 2){
+            drawSegment(x,y, g, {color:C.ink, width: baseW + (t.bump||0)*2});
+          }else if(g.length === 3){
+            drawForkGroup(x,y, g, {color:C.ink, width: baseW + (t.bump||0)*2});
+          }
+        }
+
+        const glow = tileGlow[r][c] || 0;
+        if(glow > 0.01){
+          for(const g of groups){
+            const glowW = baseW + 2 + Math.sin(performance.now()/200)*0.5 + glow*3;
+            if(g.length === 2){
+              drawSegment(x,y, g, {color:C.glow, width: glowW});
+            }else if(g.length === 3){
+              drawForkGroup(x,y, g, {color:C.glow, width: glowW});
+            }
+          }
+        }
+        drawRipple(x,y, t.rippleT||0);
+      }
+    }
+
+    // Floaters
+    for(const f of floaters){
+      const life = 1100;
+      const p = Math.min(1, f.t / life);
+      const y = f.y - 18 - p*28;
+      const a = 1 - p;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#000';
+      ctx.font = `italic 800 16px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(f.text, f.x+1, y+1);
+      ctx.fillStyle = C.glow;
+      ctx.fillText(f.text, f.x, y);
+      ctx.restore();
+      f.t += 16;
+    }
+    floaters = floaters.filter(f=> f.t < 1100);
+  }
+
+  // Loop traversal with multi-way support
+  function inBounds(r,c){ return r>=0 && r<ROWS && c>=0 && c<COLS; }
+  function neighbor(r,c,s){
+    switch(s){
+      case 0: return {r:r-1, c:c, ns:2};
+      case 1: return {r:r, c:c+1, ns:3};
+      case 2: return {r:r+1, c:c, ns:0};
+      case 3: return {r:r, c:c-1, ns:1};
+    }
+  }
+  function bkey(r,c,s){ return r+'_'+c+'_'+s; }
+  function parseKey(k){
+    const [r,c,s] = k.split('_').map(Number);
+    return {r,c,s};
+  }
+
+  // From node (r,c,sIn), move to all possible neighbor entry nodes
+  function stepNeighbors(r,c,sIn){
+    const outs = outsOnTile(r,c,sIn); // choose exits on current tile
+    const next = [];
+    for(const sOut of outs){
+      const nb = neighbor(r,c,sOut);
+      if(!inBounds(nb.r, nb.c)) continue;
+      if(tileHasSide(nb.r, nb.c, nb.ns)){ // neighbor accepts entry
+        next.push({r: nb.r, c: nb.c, s: nb.ns});
+      }
+    }
+    return next;
+  }
+
+  function minRotationStr(arr){
+    // returns lexicographically minimal rotation
+    const n = arr.length;
+    let best = null;
+    for(let i=0;i<n;i++){
+      const rot = arr.slice(i).concat(arr.slice(0,i)).join('|');
+      if(best===null || rot < best) best = rot;
+    }
+    return best;
+  }
+
+  function detectLoops(){
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) tileGlow[r][c] = 0;
+
+    // Build nodes and adjacency
+    const nodes = [];
+    const nextMap = new Map();
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const gs = groupsAt(r,c);
+        for(let s=0;s<4;s++){
+          if(gs.some(g=> g.includes(s))){
+            const k = bkey(r,c,s);
+            nodes.push(k);
+            const neigh = stepNeighbors(r,c,s).map(n=> bkey(n.r,n.c,n.s));
+            nextMap.set(k, neigh);
+          }
+        }
+      }
+    }
+    nodes.sort();
+    const loops = [];
+    const seenCycleIds = new Set();
+    const maxLen = nodes.length || 1;
+
+    for(const startKey of nodes){
+      const stack = [startKey];
+      const onstack = new Set([startKey]);
+      const startObj = parseKey(startKey);
+
+      function dfs(curKey){
+        const nbrs = nextMap.get(curKey) || [];
+        for(const nk of nbrs){
+          if(nk === startKey){
+            if(stack.length >= 2){
+              const cyc = stack.slice(); // ordered keys without repeating start
+              // Only accept if start is the minimal key in the cycle (dedupe)
+              const minKey = cyc.reduce((m,k)=> k<m?k:m, cyc[0]);
+              if(minKey !== startKey) continue;
+
+              // Canonical cycle id: minimal rotation of both directions
+              const fwd = cyc.slice();
+              const rev = cyc.slice().reverse();
+              const id = minRotationStr(fwd) < minRotationStr(rev) ? minRotationStr(fwd) : minRotationStr(rev);
+              if(seenCycleIds.has(id)) continue;
+              seenCycleIds.add(id);
+
+              // Build loop objects [{r,c,s}...]
+              const loopObjs = cyc.map(parseKey);
+              loops.push(loopObjs);
+            }
+            continue;
+          }
+          if(!onstack.has(nk) && stack.length < maxLen){
+            stack.push(nk);
+            onstack.add(nk);
+            dfs(nk);
+            onstack.delete(nk);
+            stack.pop();
+          }
+        }
+      }
+      dfs(startKey);
+    }
+
+    // Glow + loop centers
+    for(const loop of loops){
+      const tileSet = new Set();
+      for(const seg of loop){
+        tileGlow[seg.r][seg.c] = Math.max(tileGlow[seg.r][seg.c], 1.0);
+        tileSet.add(seg.r+','+seg.c);
+      }
+      let sx=0, sy=0, n=0;
+      for(const tkey of tileSet){
+        const [tr,tc] = tkey.split(',').map(Number);
+        sx += ox + tc*cell + cell/2;
+        sy += oy + tr*cell + cell/2;
+        n++;
+      }
+      loop._tiles = tileSet;
+      loop._cx = sx / Math.max(1,n);
+      loop._cy = sy / Math.max(1,n);
+    }
+    return loops;
+  }
+
+  function loopSignature(loop){
+    const arr = loop.map(e => bkey(e.r,e.c,e.s)).sort();
+    return arr.join('|');
+  }
+
+  function recalcAndScore(){
+    const loops = detectLoops();
+    const awardables = [];
+    for(const L of loops){
+      const sig = loopSignature(L);
+      if(!scoredEver.has(sig)){
+        awardables.push({sig, L});
+      }
+    }
+    if(awardables.length>0){
+      const combo = awardables.length;
+      for(const {sig, L} of awardables){
+        let base = L.length;
+        let starBonus = 0;
+        for(const st of stars){
+          if(L._tiles.has(st.r+','+st.c)) starBonus += 3;
+        }
+        const gain = (base + starBonus) * combo;
+        score += gain;
+        floaters.push({x:L._cx, y:L._cy, text:`+${gain}`, color:C.glow, t:0});
+        scoredEver.add(sig);
+      }
+    }
+  }
+
+  // Input
+  function pickCell(px,py){
+    const x = px - ox, y = py - oy;
+    if(x<0||y<0) return null;
+    const c = Math.floor(x/cell), r = Math.floor(y/cell);
+    if(r<0||r>=ROWS||c<0||c>=COLS) return null;
+    return {r,c};
+  }
+
+  canvas.addEventListener('pointerdown', (e)=>{
+    if(!running || paused) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+    const y = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+    const hit = pickCell(x,y);
+    if(!hit) return;
+
+    longDidRotate = false;
+    pressTimer = setTimeout(()=>{
+      // CCW
+      const t = grid[hit.r][hit.c];
+      t.rot = (t.rot+3)&3;
+      t.bump = 1;
+      t.rippleT = 300;
+      longDidRotate = true;
+      recalcAndScore();
+    }, 420);
+
+    canvas.setPointerCapture(e.pointerId||0);
+    canvas._lastHit = hit;
+  }, {passive:true});
+
+  canvas.addEventListener('pointerup', (e)=>{
+    if(!running || paused) return;
+    const hit = canvas._lastHit;
+    if(!hit) return;
+
+    if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
+    if(!longDidRotate){
+      // CW
+      const t = grid[hit.r][hit.c];
+      t.rot = (t.rot+1)&3;
+      t.bump = 1;
+      t.rippleT = 300;
+      recalcAndScore();
+    }
+    canvas._lastHit = null;
+  }, {passive:true});
+
+  canvas.addEventListener('pointercancel', ()=>{
+    if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
+    canvas._lastHit = null;
+  });
+
+  // Pause
+  pauseBtn.addEventListener('click', ()=>{
+    if(!running) return;
+    paused = true;
+    pauseOverlay.classList.add('show');
+  });
+  resumeBtn.addEventListener('click', ()=>{
+    paused = false;
+    pauseOverlay.classList.remove('show');
+    lastTime = performance.now();
+  });
+  restartBtn.addEventListener('click', ()=>{
+    pauseOverlay.classList.remove('show');
+    endOverlay.classList.remove('show');
+    startNew();
+  });
+  againBtn.addEventListener('click', ()=>{
+    endOverlay.classList.remove('show');
+    startNew();
+  });
+
+  function step(dt){
+    if(paused || !running) return;
+
+    timeLeft -= dt/1000;
+    if(timeLeft <= 0){
+      timeLeft = 0;
+      endGame();
+      return;
+    }
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const t = grid[r][c];
+        if(t.bump>0) t.bump = Math.max(0, t.bump - dt/200);
+        if(t.rippleT>0) t.rippleT = Math.max(0, t.rippleT - dt);
+        tileGlow[r][c] = Math.max(0, tileGlow[r][c] - dt/1200);
+      }
+    }
+    for(const st of stars){ st.pulse = (st.pulse||0) + dt/180; }
+  }
+
+  function endGame(){
+    running = false;
+    paused = false;
+    endTitle.textContent = 'Time!';
+    endBody.textContent = `SCORE ${score}`;
+    endOverlay.classList.add('show');
+
+    if(score > best){
+      best = score;
+      localStorage.setItem('ls_best', String(best));
+    }
+  }
+
+  function loop(ts){
+    const dt = Math.min(50, ts - lastTime);
+    lastTime = ts;
+
+    step(dt);
+    updateHUD();
+    draw();
+
+    if(running) requestAnimationFrame(loop);
+  }
+
+  function startNew(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    COLS = clamp(Math.floor((rect.width-24)/Math.max(44, Math.min(64, Math.floor(rect.width/10)))), 6, 10);
+    ROWS = clamp(Math.floor((rect.height-24)/Math.max(44, Math.min(64, Math.floor(rect.height/10)))), 6, 12);
+
+    timeLeft = 300; // 5 minutes
+    score = 0;
+    running = true;
+    paused = false;
+    resize();
+    initGrid();
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', ()=>{
+    const wasPaused = paused;
+    paused = true;
+    resize();
+    paused = wasPaused;
+    draw();
+  }, {passive:true});
+
+  bestLabel.textContent = `BEST ${best}`;
+  startNew();
+})();
+</script>
+</body>
+</html>
